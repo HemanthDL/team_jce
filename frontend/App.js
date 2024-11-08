@@ -1,61 +1,67 @@
-import React, { useState } from 'react';
-import { View, Text, TextInput, Button, StyleSheet } from 'react-native';
-import axios from 'axios';
-import CameraScreen from './CameraScreen';
-import { ViewPropTypes } from 'deprecated-react-native-prop-types';
+import React, { useState, useEffect } from 'react';
+import { View, Text, Button } from 'react-native';
+import { RNCamera } from 'react-native-camera';
+import { useKeepAwake } from 'expo-keep-awake';
 
+const App = () => {
+  const [isUserPresent, setIsUserPresent] = useState(false);
+  const [screenTime, setScreenTime] = useState(0);
+  const [isTracking, setIsTracking] = useState(false);
+  let timer; // To hold the interval timer
 
-export default function App() {
-  const [userId, setUserId] = useState('user1');
-  const [duration, setDuration] = useState('');
-  const [activityType, setActivityType] = useState('');
-  const [recommendation, setRecommendation] = useState('');
+  // Keep the screen awake when the component mounts
+  useKeepAwake();
 
-  const submitScreenTime = async () => {
-    try {
-      await axios.post('http://localhost:5000/api/screen-time', {
-        userId,
-        date: new Date(),
-        duration: parseInt(duration),
-        activityType,
-      });
-      alert('Screen time submitted!');
-    } catch (error) {
-      console.error(error);
+  useEffect(() => {
+    if (isTracking) {
+      // Start the timer with setInterval
+      timer = setInterval(() => {
+        setScreenTime(prevTime => prevTime + 1);
+      }, 1000);
+    } else {
+      // Clear the timer when tracking ends
+      if (timer) {
+        clearInterval(timer);
+      }
     }
+
+    // Cleanup on unmount
+    return () => {
+      if (timer) {
+        clearInterval(timer);
+      }
+    };
+  }, [isTracking]);
+
+  const startTracking = () => {
+    setIsTracking(true);
+    setScreenTime(0);
   };
 
-  const getRecommendation = async () => {
-    try {
-      const response = await axios.get(`http://localhost:5000/api/recommendations/${userId}`);
-      setRecommendation(response.data.recommendation);
-    } catch (error) {
-      console.error(error);
-    }
+  const stopTracking = () => {
+    setIsTracking(false);
+  };
+
+  const handleFaceDetected = (faces) => {
+    setIsUserPresent(faces.faces.length > 0);
   };
 
   return (
-    <View style={styles.container}>
-      <CameraScreen />
-      {/* <Text>User ID:</Text>
-      <TextInput value={userId} onChangeText={setUserId} style={styles.input} />
-
-      <Text>Duration (minutes):</Text>
-      <TextInput value={duration} onChangeText={setDuration} style={styles.input} keyboardType="numeric" />
-
-      <Text>Activity Type:</Text>
-      <TextInput value={activityType} onChangeText={setActivityType} style={styles.input} />
-
-      <Button title="Submit Screen Time" onPress={submitScreenTime} />
-
-      <Button title="Get Recommendation" onPress={getRecommendation} />
-
-      {recommendation ? <Text>Recommendation: {recommendation}</Text> : null} */}
+    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+      {isTracking ? (
+        <RNCamera
+          style={{ flex: 1, width: '100%' }}
+          type={RNCamera.Constants.Type.front}
+          onFacesDetected={handleFaceDetected}
+          faceDetectionMode={RNCamera.Constants.FaceDetection.Mode.accurate}
+        />
+      ) : (
+        <Text style={{ fontSize: 20, marginBottom: 20 }}>Press "Start" to monitor screen time.</Text>
+      )}
+      <Text>Screen Time: {screenTime} seconds</Text>
+      <Button title={isTracking ? "Stop" : "Start"} onPress={isTracking ? stopTracking : startTracking} />
     </View>
   );
-}
+};
 
-const styles = StyleSheet.create({
-  container: { padding: 20, marginTop: 50 },
-  input: { borderWidth: 1, padding: 8, marginVertical: 10, width: '100%' },
-});
+export default App;
